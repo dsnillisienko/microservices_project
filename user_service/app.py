@@ -1,29 +1,21 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.orm import Session
+from . import models, schemas
+from .database import SessionLocal, engine, get_db
 
-app = FastAPI(
-    title= "User service",
-    description="REST API для управления пользователями",
-    version="1.0.0"
-)
+# создаём таблицы при старте
+models.Base.metadata.create_all(bind=engine)
 
-class User(BaseModel):
-    id: int
-    name: str
-    email: str
-    
-users_db = [
-    User(id=1, name="Max", email="max@example.com"),
-    User(id=2, name="Oleg", email="oleg@example.com")
-]
+app = FastAPI(title="User Service")
 
-@app.get("/users", response_model=list[User])
-def get_users():
-    return users_db
+@app.get("/users")
+def get_users(db: Session = Depends(get_db)):
+    return db.query(models.User).all()
 
-@app.get("/users/{user_id}", response_model=User)
-def get_user(user_id: int):
-    user = next((u for u in users_db if u.id == user_id), None)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return user
+@app.post("/users", response_model=schemas.UserOut)
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = models.User(name=user.name, email=user.email)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
