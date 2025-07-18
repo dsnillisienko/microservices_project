@@ -1,34 +1,27 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import List
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.orm import Session
+from .database import engine, get_db
+from . import models, schemas
 
-app = FastAPI(
-    title="Order Service",
-    description="REST API для оформления заказов",
-    version="1.0.0"
-)
+models.Base.metadata.create_all(bind=engine)
 
-class Order(BaseModel):
-    id: int
-    user_id: int
-    book_id: int
-    quantity: int
-    status: str = "created"
+app = FastAPI(title="Order Service")
 
-orders_db: List[Order] = []
+@app.post("/orders", response_model=schemas.OrderOut)
+def create_order(order: schemas.OrderCreate, db: Session = Depends(get_db)):
+    db_order = models.Order(**order.dict())
+    db.add(db_order)
+    db.commit()
+    db.refresh(db_order)
+    return db_order
 
-@app.post("/orders", response_model=Order)
-def create_order(order: Order):
-    orders_db.append(order)
+@app.get("/orders/{order_id}", response_model=schemas.OrderOut)
+def get_order(order_id: int, db: Session = Depends(get_db)):
+    order = db.query(models.Order).get(order_id)
+    if not order:
+        raise HTTPException(404, "Order not found")
     return order
 
-@app.get("/orders/{order_id}", response_model=Order)
-def get_order(order_id: int):
-    order = next((o for o in orders_db if o.id == order_id), None)
-    if order is None:
-        raise HTTPException(status_code=404, detail="Order not found")
-    return order
-
-@app.get("/orders", response_model=List[Order])
-def get_orders():
-    return orders_db
+@app.get("/orders", response_model=list[schemas.OrderOut])
+def get_orders(db: Session = Depends(get_db)):
+    return db.query(models.Order).all()
