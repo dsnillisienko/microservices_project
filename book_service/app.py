@@ -1,32 +1,28 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI, Depends, HTTPException
+from sqlalchemy.orm import Session
+from .database import engine, get_db
+from . import models, schemas
 
-app = FastAPI(
-    title="Book Service",
-    description="REST API для управления книгами",
-    version="1.0.0"
-)
+models.Base.metadata.create_all(bind=engine)
 
-class Book(BaseModel):
-    id: int
-    title: str
-    author: str
-    price: float
-    stock: int
-    
-books_db = [
-    Book(id=1, title="Clean Code", author="Robert C. Martin", price=29.99, stock=10),
-    Book(id=2, title="1984", author="George Orwell", price=15.50, stock=5)
-]
+app = FastAPI(title="Book Service")
 
-@app.get("/books", response_model=list[Book])
-def get_books():
-    return books_db
+@app.get("/books", response_model=list[schemas.BookOut])
+def get_books(db: Session = Depends(get_db)):
+    return db.query(models.Book).all()
 
-@app.get("/books/{book_id}", response_model=Book)
-def get_book(book_id: int):
-    book = next((b for b in books_db if b.id == book_id), None)
-    if book is None:
-        raise HTTPException(status_code=404, detail="Book not found")
+@app.post("/books", response_model=schemas.BookOut)
+def create_book(book: schemas.BookCreate, db: Session = Depends(get_db)):
+    db_book = models.Book(**book.dict())
+    db.add(db_book)
+    db.commit()
+    db.refresh(db_book)
+    return db_book
+
+@app.get("/books/{book_id}", response_model=schemas.BookOut)
+def get_book(book_id: int, db: Session = Depends(get_db)):
+    book = db.query(models.Book).get(book_id)
+    if not book:
+        raise HTTPException(404, "Book not found")
     return book
 
