@@ -13,5 +13,35 @@ services:
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
       - postgres_data:/var/lib/postgresql/data
 
+  user_service:
+    build: ./user_service
+    ports:
+      - "8001:8001"
+    depends_on:
+      - postgres
+
+  book_service:
+    build: ./book_service
+    ports:
+      - "8002:8002"
+    depends_on:
+      - postgres
+
+  order_service:
+    build: ./order_service
+    ports:
+      - "8003:8003"
+    depends_on:
+      - postgres
+
+  api_gateway:
+    build: ./api_gateway
+    ports:
+      - "8000:8000"
+    depends_on:
+      - user_service
+      - book_service
+      - order_service
+
 volumes:
   postgres_data:
